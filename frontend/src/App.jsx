@@ -3,28 +3,40 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 const makeSessionId = () => {
-  const existing = window.sessionStorage.getItem('jarvis_session_id');
+  const existing = window.localStorage.getItem('jarvis_session_id');
   if (existing) {
     return existing;
   }
   const created = crypto.randomUUID();
-  window.sessionStorage.setItem('jarvis_session_id', created);
+  window.localStorage.setItem('jarvis_session_id', created);
   return created;
 };
 
 export default function App() {
-  const [messages, setMessages] = useState([
-    {
-      role: 'assistant',
-      content: 'Hello, I am JARVIS. How can I help you today?'
+  const [messages, setMessages] = useState(() => {
+    try {
+      const saved = window.localStorage.getItem('jarvis_chat_history');
+      return saved ? JSON.parse(saved) : [
+        { role: 'assistant', content: 'नमस्ते! मैं JARVIS हूँ। बताइए, मैं आपकी क्या मदद करूँ?' }
+      ];
+    } catch {
+      return [{ role: 'assistant', content: 'नमस्ते! मैं JARVIS हूँ। बताइए, मैं आपकी क्या मदद करूँ?' }];
     }
-  ]);
+  });
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [lastFailedMessage, setLastFailedMessage] = useState('');
   const sessionId = useMemo(() => makeSessionId(), []);
   const listRef = useRef(null);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('jarvis_chat_history', JSON.stringify(messages.slice(-100)));
+    } catch {
+      setError('फोन की स्टोरेज में चैट सेव नहीं हो पाई।');
+    }
+  }, [messages]);
 
   useEffect(() => {
     if (listRef.current) {
