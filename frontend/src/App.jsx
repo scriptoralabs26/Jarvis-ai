@@ -68,7 +68,13 @@ export default function App() {
       const response = await fetch(`${serverUrl.trim().replace(/\/$/, '')}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, message: trimmed })
+        body: JSON.stringify({
+          session_id: sessionId,
+          message: trimmed,
+          history: [...messages, { role: 'user', content: trimmed }]
+            .filter(item => item.role === 'user' || item.role === 'assistant')
+            .slice(-30)
+        })
       });
       if (!response.ok) throw new Error('HTTP ' + response.status);
       const data = await response.json();
