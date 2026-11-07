@@ -1,161 +1,162 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const WELCOME = { role: 'assistant', content: 'नमस्ते! मैं JARVIS हूँ। बताइए, मैं आपकी क्या मदद करूँ?' };
 
-const makeSessionId = () => {
-  const existing = window.localStorage.getItem('jarvis_session_id');
-  if (existing) {
-    return existing;
+function makeSessionId() {
+  try {
+    let id = window.localStorage.getItem('jarvis_session_id');
+    if (!id) {
+      id = globalThis.crypto?.randomUUID?.() || 'jarvis-' + Date.now();
+      window.localStorage.setItem('jarvis_session_id', id);
+    }
+    return id;
+  } catch {
+    return 'jarvis-' + Date.now();
   }
-  const created = crypto.randomUUID();
-  window.localStorage.setItem('jarvis_session_id', created);
-  return created;
-};
+}
 
 export default function App() {
   const [messages, setMessages] = useState(() => {
     try {
       const saved = window.localStorage.getItem('jarvis_chat_history');
-      return saved ? JSON.parse(saved) : [
-        { role: 'assistant', content: 'नमस्ते! मैं JARVIS हूँ। बताइए, मैं आपकी क्या मदद करूँ?' }
-      ];
-    } catch {
-      return [{ role: 'assistant', content: 'नमस्ते! मैं JARVIS हूँ। बताइए, मैं आपकी क्या मदद करूँ?' }];
-    }
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) && parsed.length ? parsed.slice(-100) : [WELCOME];
+    } catch { return [WELCOME]; }
   });
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [speakReplies, setSpeakReplies] = useState(false);
   const [error, setError] = useState('');
-  const [lastFailedMessage, setLastFailedMessage] = useState('');
-  const sessionId = useMemo(() => makeSessionId(), []);
+  const sessionId = useMemo(makeSessionId, []);
   const listRef = useRef(null);
+  const recognitionRef = useRef(null);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem('jarvis_chat_history', JSON.stringify(messages.slice(-100)));
-    } catch {
-      setError('फोन की स्टोरेज में चैट सेव नहीं हो पाई।');
-    }
+    try { window.localStorage.setItem('jarvis_chat_history', JSON.stringify(messages.slice(-100))); }
+    catch { setError('फोन की स्टोरेज में जगह कम है; चैट सेव नहीं हो पाई।'); }
   }, [messages]);
 
   useEffect(() => {
-    if (listRef.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight;
-    }
+    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages, isLoading]);
+
+  useEffect(() => () => {
+    try { recognitionRef.current?.stop(); } catch {}
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  }, []);
+
+  const speak = (text) => {
+    if (!speakReplies || !('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = /[\u0900-\u097F]/.test(text) ? 'hi-IN' : 'en-IN';
+    utterance.rate = 1;
+    window.speechSynthesis.speak(utterance);
+  };
 
   const sendMessage = async (rawMessage) => {
     const trimmed = rawMessage.trim();
-    if (!trimmed || isLoading) {
-      return;
-    }
-
+    if (!trimmed || isLoading) return;
     setError('');
-    setLastFailedMessage('');
     setIsLoading(true);
-    setMessages((prev) => [...prev, { role: 'user', content: trimmed }]);
+    setMessages(prev => [...prev, { role: 'user', content: trimmed }]);
     setInput('');
-
     try {
       const response = await fetch(`${API_BASE}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: sessionId, message: trimmed })
       });
-
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
-
+      if (!response.ok) throw new Error('HTTP ' + response.status);
       const data = await response.json();
-      setMessages((prev) => [...prev, { role: 'assistant', content: data.reply }]);
+      const reply = data.reply || 'मुझे जवाब नहीं मिला। कृपया फिर कोशिश करें।';
+      setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
+      speak(reply);
     } catch {
-      setError('Network issue detected.');
-      setLastFailedMessage(trimmed);
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: 'I’m temporarily unable to respond. Please try again.' }
-      ]);
-    } finally {
-      setIsLoading(false);
+      setError('JARVIS सर्वर से कनेक्शन नहीं हो पाया। इंटरनेट और backend सेटिंग जाँचें।');
+      setMessages(prev => [...prev, { role: 'assistant', content: 'अभी AI सर्वर से संपर्क नहीं हो पा रहा है। सर्वर जुड़ने के बाद मैं जवाब दे पाऊँगा। आपकी चैट फोन में सुरक्षित है।' }]);
+    } finally { setIsLoading(false); }
+  };
+
+  const startListening = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setError('इस ब्राउज़र में आवाज़ पहचान उपलब्ध नहीं है। Chrome में माइक्रोफोन अनुमति देकर कोशिश करें।');
+      return;
     }
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'hi-IN';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = event => {
+      const transcript = event.results?.[0]?.[0]?.transcript || '';
+      setInput(transcript);
+      setIsListening(false);
+    };
+    recognition.onerror = () => {
+      setError('आवाज़ सुनने में समस्या आई। माइक्रोफोन अनुमति जाँचें।');
+      setIsListening(false);
+    };
+    recognition.onend = () => setIsListening(false);
+    recognitionRef.current = recognition;
+    try { recognition.start(); setIsListening(true); }
+    catch { setError('माइक्रोफोन शुरू नहीं हो पाया।'); setIsListening(false); }
+  };
+
+  const clearChat = () => {
+    if (!window.confirm('क्या आप इस फोन की सेव की हुई चैट मिटाना चाहते हैं?')) return;
+    setMessages([WELCOME]);
+    setError('');
+    try { window.localStorage.removeItem('jarvis_chat_history'); } catch {}
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-black via-zinc-900 to-slate-900 text-slate-100">
-      <div className="mx-auto flex h-screen w-full max-w-5xl flex-col px-4 py-6 md:px-8">
-        <header className="mb-4 border-b border-white/10 pb-4">
-          <h1 className="text-2xl font-semibold tracking-wide">JARVIS AI</h1>
-          <p className="mt-1 text-sm text-slate-400">Professional AI Assistant</p>
+    <div className="jarvis-shell">
+      <div className="app-frame">
+        <header className="topbar">
+          <div className="brand-mark">J</div>
+          <div className="brand-copy">
+            <h1>JARVIS <span>AI</span></h1>
+            <p><i /> PERSONAL ASSISTANT</p>
+          </div>
+          <div className="top-actions">
+            <button className={speakReplies ? 'tool active' : 'tool'} onClick={() => setSpeakReplies(v => !v)} aria-label="Toggle voice replies" title="आवाज़ में जवाब">{speakReplies ? '🔊' : '🔈'}</button>
+            <button className="tool" onClick={clearChat} aria-label="Clear chat" title="चैट मिटाएँ">⌫</button>
+          </div>
         </header>
 
-        <main
-          ref={listRef}
-          className="flex-1 space-y-4 overflow-y-auto rounded-2xl border border-white/10 bg-black/30 p-4 shadow-2xl backdrop-blur"
-        >
+        <div className="status-strip"><span className="status-dot" /> LOCAL CHAT MEMORY <span className="status-divider">|</span> DEVICE STORAGE</div>
+
+        <main ref={listRef} className="chat-area">
+          <div className="date-chip">SESSION STARTED</div>
           {messages.map((message, idx) => (
-            <div
-              key={`${message.role}-${idx}`}
-              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
-            >
-              <div
-                className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed md:max-w-[70%] ${
-                  message.role === 'user'
-                    ? 'bg-blue-600/70 text-white'
-                    : 'border border-white/10 bg-zinc-900/80 text-slate-100'
-                }`}
-              >
-                {message.content}
+            <div key={idx} className={`message-row ${message.role === 'user' ? 'user-row' : 'assistant-row'}`}>
+              {message.role !== 'user' && <div className="avatar">J</div>}
+              <div className={`bubble ${message.role === 'user' ? 'user-bubble' : 'assistant-bubble'}`}>
+                <div className="bubble-label">{message.role === 'user' ? 'YOU' : 'JARVIS'}</div>
+                <div className="bubble-text">{message.content}</div>
               </div>
             </div>
           ))}
-          {isLoading && (
-            <div className="flex justify-start animate-pulse">
-              <div className="rounded-2xl border border-white/10 bg-zinc-900/80 px-4 py-3 text-sm text-slate-300">
-                JARVIS is thinking…
-              </div>
-            </div>
-          )}
+          {isLoading && <div className="message-row assistant-row"><div className="avatar">J</div><div className="bubble assistant-bubble"><div className="bubble-label">JARVIS</div><div className="thinking"><span/><span/><span/> सोच रहा हूँ…</div></div></div>}
         </main>
 
-        <footer className="mt-4 space-y-3">
-          {error && (
-            <div className="flex items-center justify-between rounded-lg border border-red-500/30 bg-red-950/30 px-4 py-2 text-sm text-red-200">
-              <span>{error}</span>
-              {lastFailedMessage && (
-                <button
-                  type="button"
-                  onClick={() => sendMessage(lastFailedMessage)}
-                  className="rounded-md border border-red-300/40 px-3 py-1 text-xs font-medium transition hover:bg-red-400/20"
-                >
-                  Retry
-                </button>
-              )}
-            </div>
-          )}
+        {error && <div className="error-banner">{error}<button onClick={() => setError('')}>×</button></div>}
 
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              sendMessage(input);
-            }}
-            className="flex items-center gap-3"
-          >
-            <input
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              placeholder="Ask JARVIS anything…"
-              className="flex-1 rounded-xl border border-white/15 bg-black/40 px-4 py-3 text-sm text-slate-100 outline-none transition focus:border-blue-500"
-              autoComplete="off"
-            />
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Send
-            </button>
+        <footer className="composer-wrap">
+          <form className="composer" onSubmit={e => { e.preventDefault(); sendMessage(input); }}>
+            <button type="button" className={isListening ? 'mic-button listening' : 'mic-button'} onClick={startListening} aria-label="Voice input" title="बोलकर पूछें">{isListening ? '■' : '🎙'}</button>
+            <input value={input} onChange={e => setInput(e.target.value)} placeholder="JARVIS से कुछ भी पूछें…" autoComplete="off" />
+            <button type="submit" className="send-button" disabled={isLoading || !input.trim()} aria-label="Send">➤</button>
           </form>
+          <div className="footer-note">आपकी चैट इस डिवाइस में सेव होती है · AI जवाब के लिए इंटरनेट चाहिए</div>
         </footer>
       </div>
     </div>
