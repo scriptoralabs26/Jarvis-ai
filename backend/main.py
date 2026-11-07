@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
+from fastapi.staticfiles import StaticFiles
 
 from config import get_settings
 from memory import ConversationMemory
@@ -83,3 +84,11 @@ async def chat(payload: ChatRequest) -> ChatResponse:
 async def clear_chat(session_id: str) -> dict[str, str]:
     memory.clear(session_id)
     return {"status": "cleared"}
+
+
+# Serve the built mobile/web interface from the same service when deployed.
+# API routes above remain available at /health and /chat.
+import os
+_frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "dist"))
+if os.path.isdir(_frontend_dist):
+    app.mount("/", StaticFiles(directory=_frontend_dist, html=True), name="frontend")
