@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 const WELCOME = { role: 'assistant', content: 'नमस्ते! मैं JARVIS हूँ। बताइए, मैं आपकी क्या मदद करूँ?' };
 
 function makeSessionId() {
@@ -28,6 +27,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [speakReplies, setSpeakReplies] = useState(false);
+  const [serverUrl, setServerUrl] = useState(() => { try { return window.localStorage.getItem('jarvis_api_base_url') || import.meta.env.VITE_API_BASE_URL || ''; } catch { return import.meta.env.VITE_API_BASE_URL || ''; } });
   const [error, setError] = useState('');
   const sessionId = useMemo(makeSessionId, []);
   const listRef = useRef(null);
@@ -64,7 +64,8 @@ export default function App() {
     setMessages(prev => [...prev, { role: 'user', content: trimmed }]);
     setInput('');
     try {
-      const response = await fetch(`${API_BASE}/chat`, {
+      if (!serverUrl.trim()) throw new Error('Backend URL not configured');
+      const response = await fetch(`${serverUrl.trim().replace(/\/$/, '')}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: sessionId, message: trimmed })
@@ -75,7 +76,7 @@ export default function App() {
       setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
       speak(reply);
     } catch {
-      setError('JARVIS सर्वर से कनेक्शन नहीं हो पाया। इंटरनेट और backend सेटिंग जाँचें।');
+      setError('JARVIS सर्वर से कनेक्शन नहीं हो पाया। इंटरनेट और ⚙ सेटिंग में backend URL जाँचें।');
       setMessages(prev => [...prev, { role: 'assistant', content: 'अभी AI सर्वर से संपर्क नहीं हो पा रहा है। सर्वर जुड़ने के बाद मैं जवाब दे पाऊँगा। आपकी चैट फोन में सुरक्षित है।' }]);
     } finally { setIsLoading(false); }
   };
@@ -128,6 +129,7 @@ export default function App() {
           </div>
           <div className="top-actions">
             <button className={speakReplies ? 'tool active' : 'tool'} onClick={() => setSpeakReplies(v => !v)} aria-label="Toggle voice replies" title="आवाज़ में जवाब">{speakReplies ? '🔊' : '🔈'}</button>
+            <button className="tool" onClick={() => { const value = window.prompt("JARVIS backend URL (Render URL)", serverUrl); if (value !== null) { const clean = value.trim().replace(/\/$/, ""); setServerUrl(clean); try { window.localStorage.setItem("jarvis_api_base_url", clean); } catch {} } }} aria-label="Server settings" title="AI सर्वर सेटिंग">⚙</button>
             <button className="tool" onClick={clearChat} aria-label="Clear chat" title="चैट मिटाएँ">⌫</button>
           </div>
         </header>
