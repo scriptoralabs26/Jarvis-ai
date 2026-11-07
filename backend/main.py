@@ -70,11 +70,11 @@ async def chat(payload: ChatRequest) -> ChatResponse:
         for item in payload.history
         if item.role in ("user", "assistant")
     ][-30:]
-    if safe_history and safe_history[-1].get("role") == "user" and safe_history[-1].get("content") == payload.message:
+    if safe_history:
         conversation = safe_history
     else:
         memory.add(payload.session_id, "user", payload.message)
-        conversation = [*memory.get_recent(payload.session_id), {"role": "user", "content": payload.message}]
+        conversation = memory.get_recent(payload.session_id)
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}, *conversation]
 
