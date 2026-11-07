@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: jarvis-ai
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: MODEL_NAME
+        value: gpt-4o-mini
+      - key: MEMORY_WINDOW
+        value: "30"
