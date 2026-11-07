@@ -19,9 +19,15 @@ client = AsyncOpenAI(api_key=settings.openai_api_key) if settings.openai_api_key
 memory = ConversationMemory(max_messages=settings.memory_window)
 
 
+class ChatMessage(BaseModel):
+    role: str
+    content: str = Field(min_length=1, max_length=4000)
+
+
 class ChatRequest(BaseModel):
     session_id: str = Field(default="default", min_length=1, max_length=128)
     message: str = Field(min_length=1, max_length=4000)
+    history: list[ChatMessage] = Field(default_factory=list, max_length=30)
 
 
 class ChatResponse(BaseModel):
@@ -57,10 +63,20 @@ async def chat(payload: ChatRequest) -> ChatResponse:
         logger.error("OpenAI API key missing")
         return ChatResponse(reply=FALLBACK_MESSAGE)
 
-    memory.add(payload.session_id, "user", payload.message)
-    history = memory.get_recent(payload.session_id)
+    # The phone sends its locally saved conversation context with each request.
+    # Only user/assistant messages are accepted; system instructions stay server-side.
+    safe_history = [
+        {"role": item.role, "content": item.content}
+        for item in payload.history
+        if item.role in ("user", "assistant")
+    ][-30:]
+    if safe_history and safe_history[-1].get("role") == "user" and safe_history[-1].get("content") == payload.message:
+        conversation = safe_history
+    else:
+        memory.add(payload.session_id, "user", payload.message)
+        conversation = [*memory.get_recent(payload.session_id), {"role": "user", "content": payload.message}]
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}, *history]
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}, *conversation]
 
     try:
         completion = await client.chat.completions.create(
