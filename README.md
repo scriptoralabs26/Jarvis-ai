@@ -1,98 +1,55 @@
-# JARVIS AI
+# JARVIS AI — Mobile-first hybrid assistant
 
-JARVIS AI is a production-oriented bilingual AI assistant platform with a modern chat experience and a FastAPI backend. The interface is English-first, while JARVIS can understand both English and Hindi input and respond according to language instructions in the system prompt.
+JARVIS is a Hindi/English assistant with a mobile-first interface, on-device chat history, optional speech input/output, and a FastAPI cloud backend.
 
-## Tech Stack
+## Current mobile features
+- Responsive dark JARVIS interface for Android-sized screens.
+- Chat history and session identifier saved in the device browser/app storage (last 100 messages).
+- Hindi speech input where the Android WebView/browser supports SpeechRecognition.
+- Optional spoken replies using device text-to-speech.
+- Backend URL can be set from the gear button in the app.
+- Chat history can be cleared from the app.
 
-- **Frontend:** React (Vite), Tailwind CSS
-- **Backend:** Python, FastAPI, async OpenAI client
-- **Memory:** In-memory bounded conversation window (future-ready for SQLite/PostgreSQL)
+**Privacy:** chat history is saved locally on the device. Messages typed or spoken and sent to JARVIS are transmitted to the configured backend for an AI response. Do not send private information unless you want the AI service to process it. Phone storage is not uploaded as a whole.
 
-## Features
+## Build Android APK without a personal computer
+The GitHub Actions workflow `.github/workflows/build-android-apk.yml` builds a debug APK on GitHub's hosted runner.
 
-- Premium dark chat interface with smooth messaging flow
-- User messages on right, JARVIS messages on left
-- Loading state (`JARVIS is thinking…`) and retry control on network failures
-- Session memory abstraction that keeps recent message context
-- Centralized backend config via environment variables
-- Safe fallback response when AI provider fails
+1. Open the repository's **Actions** tab.
+2. Select **Build JARVIS Android APK**.
+3. Open the latest successful run.
+4. Under **Artifacts**, download `JARVIS-AI-debug-APK`.
+5. Extract the ZIP and install `app-debug.apk` on Android. Android may ask you to allow installation from that browser/file manager.
 
-## Project Structure
+The workflow also runs automatically when app or backend source files change on the `jarvis/android-app` branch.
 
-```text
-jarvis-ai/
-├── backend/
-│   ├── config.py
-│   ├── main.py
-│   ├── memory.py
-│   ├── prompts.py
-│   └── requirements.txt
-├── frontend/
-│   ├── src/
-│   │   ├── App.jsx
-│   │   ├── index.css
-│   │   └── main.jsx
-│   ├── index.html
-│   ├── package.json
-│   ├── postcss.config.js
-│   ├── tailwind.config.js
-│   └── vite.config.js
-└── .env.example
-```
+## Deploy the cloud backend
+1. Create a Render account and choose **New + → Blueprint**.
+2. Connect this GitHub repository and select branch `jarvis/android-app`.
+3. Render reads `render.yaml` and creates the `jarvis-ai` web service.
+4. In the service's Environment settings, set `OPENAI_API_KEY` to your own API key. Never commit this secret to GitHub or send it in chat.
+5. Wait until the service is live. Copy its public HTTPS URL.
+6. In the JARVIS app, tap the gear icon and save that URL. The app will then send chat prompts to that backend.
 
-## Local Development
+The AI backend requires a separately billed API key. A ChatGPT subscription does not include API usage.
 
-### 1) Backend
-
+## Local development
+### Backend
 ```bash
 cd backend
-python -m venv .venv
-source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-Create `.env` in repo root (or backend root) based on `.env.example`, then run:
-
-```bash
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 2) Frontend
-
+### Frontend
 ```bash
 cd frontend
 npm install
-npm run dev -- --host 0.0.0.0 --port 5173
+npm run dev
 ```
 
-Open `http://localhost:5173`.
-
-## Environment Setup
-
-Copy `.env.example` and define:
-
-- `OPENAI_API_KEY`
-- `MODEL_NAME`
-- `TEMPERATURE`
-- `MAX_TOKENS`
-- `MEMORY_WINDOW`
-- `REQUEST_TIMEOUT_SECONDS`
-- `VITE_API_BASE_URL`
-
-## Deployment Notes
-
-### Backend (Render / Railway / AWS)
-
-- Use `uvicorn main:app --host 0.0.0.0 --port $PORT`
-- Set environment variables in deployment settings
-- Keep API keys server-side only
-
-### Frontend (Vercel / Netlify)
-
-- Build command: `npm run build`
-- Output directory: `dist`
-- Set `VITE_API_BASE_URL` to deployed backend URL
-
-## Future-Ready Architecture
-
-The codebase is structured to support upcoming capabilities such as auth, persistent memory, document ingestion, voice input/output, and broader multilingual expansion.
+## Project layout
+- `frontend/`: React/Vite mobile UI and Capacitor Android wrapper.
+- `backend/`: FastAPI chat API.
+- `Dockerfile`, `render.yaml`: one-service cloud deployment.
+- `.github/workflows/build-android-apk.yml`: cloud APK build.
