@@ -2,6 +2,17 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 const WELCOME = { role: 'assistant', content: 'नमस्ते! मैं JARVIS हूँ। बताइए, मैं आपकी क्या मदद करूँ?' };
 const DEFAULT_API = import.meta.env.VITE_API_BASE_URL || 'https://jarvis-ai-1464.onrender.com';
+function normalizeBackendUrl(value) {
+  let raw = String(value || '').trim();
+  if (!raw) return '';
+  if (!/^https?:\/\//i.test(raw)) raw = 'https://' + raw;
+  const parsed = new URL(raw);
+  if (parsed.protocol !== 'https:') throw new Error('सुरक्षा के लिए https:// वाला URL डालें।');
+  parsed.search = '';
+  parsed.hash = '';
+  parsed.pathname = parsed.pathname.replace(/\/(healthz?|api\/health)\/?$/i, '').replace(/\/+$/, '');
+  return parsed.origin + (parsed.pathname === '/' ? '' : parsed.pathname);
+}
 
 function makeSessionId() {
   try {
@@ -40,7 +51,7 @@ export default function App() {
   const listRef = useRef(null);
   const recognitionRef = useRef(null);
 
-  const baseUrl = serverUrl.trim().replace(/\/+$/, '');
+  const baseUrl = (() => { try { return normalizeBackendUrl(serverUrl); } catch { return ''; } })();
 
   useEffect(() => {
     try { window.localStorage.setItem('jarvis_chat_history', JSON.stringify(messages.slice(-100))); }
@@ -55,21 +66,26 @@ export default function App() {
     if (!baseUrl) { setServerStatus('missing'); setServerInfo('सेटिंग में Render URL जोड़ें'); return; }
     let cancelled = false;
     setServerStatus('checking');
-    fetch(baseUrl + '/health', { method: 'GET', headers: { Accept: 'application/json' } })
-      .then(async response => {
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error('HTTP ' + response.status);
-        if (!cancelled) {
-          setServerStatus('online');
-          setServerInfo(data.api_key_configured === false ? 'सर्वर चालू · API key बाकी' : 'सर्वर कनेक्टेड');
-        }
-      })
-      .catch(err => {
-        if (!cancelled) {
-          setServerStatus('offline');
-          setServerInfo(err.message || 'सर्वर तक पहुँच नहीं');
-        }
-      });
+    const checkHealth = async () => {
+      let lastError = 'Health endpoint नहीं मिला';
+      for (const path of ['/health', '/healthz', '/api/health']) {
+        try {
+          const response = await fetch(baseUrl + path, { method: 'GET', headers: { Accept: 'application/json' } });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) { lastError = 'HTTP ' + response.status + ' (' + path + ')'; continue; }
+          if (!cancelled) {
+            setServerStatus('online');
+            setServerInfo(data.api_key_configured === false ? 'सर्वर चालू · API key बाकी' : 'सर्वर कनेक्टेड');
+          }
+          return;
+        } catch (err) { lastError = err?.message || 'Network request failed'; }
+      }
+      if (!cancelled) {
+        setServerStatus('offline');
+        setServerInfo(lastError);
+      }
+    };
+    checkHealth();
     return () => { cancelled = true; };
   }, [baseUrl]);
 
@@ -95,10 +111,11 @@ export default function App() {
 
   const saveServerUrl = (event) => {
     event.preventDefault();
-    let clean = urlDraft.trim().replace(/\/+$/, '');
-    if (clean && !/^https?:\/\//i.test(clean)) clean = 'https://' + clean;
-    if (clean && !/^https:\/\//i.test(clean)) {
-      setSettingsMessage('सुरक्षा के लिए https:// वाला URL डालें।');
+    let clean = '';
+    try {
+      clean = normalizeBackendUrl(urlDraft);
+    } catch (err) {
+      setSettingsMessage(err?.message || 'कृपया सही Render URL डालें।');
       return;
     }
     setServerUrl(clean);
@@ -216,7 +233,7 @@ export default function App() {
               <div className="settings-heading"><div><span className="settings-kicker">SYSTEM CONFIGURATION</span><h2>JARVIS Server</h2></div><button type="button" className="settings-close" onClick={() => setSettingsOpen(false)} aria-label="Close">×</button></div>
               <label className="settings-label" htmlFor="jarvis-backend-url">Backend URL (Render)</label>
               <input id="jarvis-backend-url" className="settings-url-input" type="url" inputMode="url" autoComplete="url" placeholder="https://your-service.onrender.com" value={urlDraft} onChange={e => setUrlDraft(e.target.value)} />
-              <p className="settings-help">पूरा URL https:// से शुरू होना चाहिए। सेव करने के बाद यह इसी फोन में याद रहेगा।</p>
+              <p className="settings-help">सिर्फ https://your-service.onrender.com डालें। /health, /healthz या ?utm... मत जोड़ें — JARVIS उन्हें खुद ठीक कर देगा।</p>
               {settingsMessage && <p className="settings-message" role="status">{settingsMessage}</p>}
               <div className="settings-actions"><button type="button" className="settings-cancel" onClick={() => setSettingsOpen(false)}>रद्द करें</button><button type="submit" className="settings-save">SAVE URL</button></div>
             </form>
