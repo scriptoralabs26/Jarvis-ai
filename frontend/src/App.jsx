@@ -26,6 +26,9 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [speakReplies, setSpeakReplies] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [urlDraft, setUrlDraft] = useState('');
+  const [settingsMessage, setSettingsMessage] = useState('');
   const [serverUrl, setServerUrl] = useState(() => {
     try { return window.localStorage.getItem('jarvis_api_base_url') || DEFAULT_API; }
     catch { return DEFAULT_API; }
@@ -84,13 +87,31 @@ export default function App() {
     window.speechSynthesis.speak(utterance);
   };
 
-  const saveServerUrl = () => {
-    const value = window.prompt('JARVIS backend URL (Render URL)', serverUrl);
-    if (value === null) return;
-    const clean = value.trim().replace(/\/+$/, '');
+  const openServerSettings = () => {
+    setUrlDraft(serverUrl);
+    setSettingsMessage('');
+    setSettingsOpen(true);
+  };
+
+  const saveServerUrl = (event) => {
+    event.preventDefault();
+    let clean = urlDraft.trim().replace(/\/+$/, '');
+    if (clean && !/^https?:\/\//i.test(clean)) clean = 'https://' + clean;
+    if (clean && !/^https:\/\//i.test(clean)) {
+      setSettingsMessage('सुरक्षा के लिए https:// वाला URL डालें।');
+      return;
+    }
     setServerUrl(clean);
     setError('');
-    try { window.localStorage.setItem('jarvis_api_base_url', clean); } catch {}
+    try {
+      window.localStorage.setItem('jarvis_api_base_url', clean);
+      const check = window.localStorage.getItem('jarvis_api_base_url');
+      if (check !== clean) throw new Error('Saved value could not be verified');
+      setSettingsMessage('URL इस फोन में सेव हो गया है।');
+    } catch {
+      setSettingsMessage('URL अभी ऐप में लागू हुआ, लेकिन फोन की स्टोरेज में सेव नहीं हो पाया।');
+    }
+    setTimeout(() => setSettingsOpen(false), 900);
   };
 
   const sendMessage = async (rawMessage) => {
@@ -167,7 +188,7 @@ export default function App() {
           </div>
           <div className="top-actions">
             <button className={speakReplies ? 'tool active' : 'tool'} onClick={() => setSpeakReplies(v => !v)} aria-label="Toggle voice replies" title="आवाज़ में जवाब">{speakReplies ? '🔊' : '🔈'}</button>
-            <button className="tool" onClick={saveServerUrl} aria-label="Server settings" title="AI सर्वर सेटिंग">⚙</button>
+            <button className="tool" onClick={openServerSettings} aria-label="Server settings" title="AI सर्वर सेटिंग">⚙</button>
             <button className="tool" onClick={clearChat} aria-label="Clear chat" title="चैट मिटाएँ">⌫</button>
           </div>
         </header>
@@ -188,6 +209,19 @@ export default function App() {
           ))}
           {isLoading && <div className="message-row assistant-row"><div className="avatar">J</div><div className="bubble assistant-bubble"><div className="bubble-label">JARVIS</div><div className="thinking"><span/><span/><span/> सोच रहा हूँ…</div></div></div>}
         </main>
+
+        {settingsOpen && (
+          <div className="settings-backdrop" role="presentation" onClick={e => { if (e.target === e.currentTarget) setSettingsOpen(false); }}>
+            <form className="settings-panel" onSubmit={saveServerUrl}>
+              <div className="settings-heading"><div><span className="settings-kicker">SYSTEM CONFIGURATION</span><h2>JARVIS Server</h2></div><button type="button" className="settings-close" onClick={() => setSettingsOpen(false)} aria-label="Close">×</button></div>
+              <label className="settings-label" htmlFor="jarvis-backend-url">Backend URL (Render)</label>
+              <input id="jarvis-backend-url" className="settings-url-input" type="url" inputMode="url" autoComplete="url" placeholder="https://your-service.onrender.com" value={urlDraft} onChange={e => setUrlDraft(e.target.value)} />
+              <p className="settings-help">पूरा URL https:// से शुरू होना चाहिए। सेव करने के बाद यह इसी फोन में याद रहेगा।</p>
+              {settingsMessage && <p className="settings-message" role="status">{settingsMessage}</p>}
+              <div className="settings-actions"><button type="button" className="settings-cancel" onClick={() => setSettingsOpen(false)}>रद्द करें</button><button type="submit" className="settings-save">SAVE URL</button></div>
+            </form>
+          </div>
+        )}
 
         {error && <div className="error-banner" role="alert">{error}<button onClick={() => setError('')}>×</button></div>}
 
