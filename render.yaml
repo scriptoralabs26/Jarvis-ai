@@ -3,7 +3,7 @@ services:
     name: jarvis-ai
     runtime: docker
     plan: free
-    healthCheckPath: /health
+    healthCheckPath: /healthz
     envVars:
       - key: OPENAI_API_KEY
         sync: false
