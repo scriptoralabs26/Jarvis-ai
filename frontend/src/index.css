@@ -35,3 +35,11 @@ button{cursor:pointer}
 .footer-note{text-align:center;color:#5c7c91;font-size:9px;margin-top:9px;letter-spacing:.2px}
 @media(min-width:700px){.app-frame{margin:20px 0;height:calc(100dvh - 40px);border:1px solid #1a3043;border-radius:24px;overflow:hidden;box-shadow:0 20px 90px #0008}.jarvis-shell{padding:20px}}
 @media(max-width:380px){.topbar{padding:0 12px}.chat-area{padding:16px 10px}.composer-wrap{padding-left:10px;padding-right:10px}.bubble-text{font-size:13px}}
+
+/* Live diagnostics and refined system status */
+.server-detail{flex-shrink:0;padding:5px 20px 7px;color:#7399ae;font-size:10px;letter-spacing:.35px;background:rgba(5,14,24,.72);border-bottom:1px solid #102638;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.status-dot-off{background:#e6a34b!important;box-shadow:0 0 8px #e6a34b!important}
+.status-strip{font-weight:700}
+.tool:focus-visible,.mic-button:focus-visible,.send-button:focus-visible,.composer input:focus-visible{outline:2px solid #55cfff;outline-offset:2px}
+.error-banner{line-height:1.55;overflow-wrap:anywhere}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
