@@ -55,12 +55,15 @@ app.add_middleware(
 
 
 @app.get("/health")
+@app.get("/healthz")
+@app.get("/api/health")
 async def health() -> dict[str, object]:
     return {
         "status": "ok",
         "assistant": "JARVIS",
         "api_key_configured": bool(settings.openai_api_key),
         "model": settings.model_name,
+        "api_version": "1.1.1",
     }
 
 
