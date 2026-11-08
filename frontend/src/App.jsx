@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 const WELCOME = { role: 'assistant', content: 'नमस्ते! मैं JARVIS हूँ। बताइए, मैं आपकी क्या मदद करूँ?' };
-const DEFAULT_API = import.meta.env.VITE_API_BASE_URL || '';
+const DEFAULT_API = import.meta.env.VITE_API_BASE_URL || 'https://jarvis-ai-1464.onrender.com';
 
 function makeSessionId() {
   try {
